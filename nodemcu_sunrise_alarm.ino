@@ -1,18 +1,30 @@
 /*
- * TimeNTP_ESP8266WiFi.ino
- * Example showing time sync to NTP time source
- *
- * This sketch uses the ESP8266WiFi library
+ * Make LED bulbs bright when it is time to wakeup!
  */
 
 #include <TimeLib.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
+#include <dimmable_light.h>
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+const int syncPin = 13;
+const int thyristorPin = 14;
+DimmableLight light(thyristorPin);
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Set the hour of the day (0-23) you want the LEDs to start getting brighter
+static const uint8_t aHour = 6; 
+// Set the minute of the above hour (0-59) you want the LEDs to start getting brighter
+static const uint8_t aMin = 30; 
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // You need to make a file called wifi_creds.h that has #define statements for your wifi ssid and password.
 #include "wifi_creds.h"
 const char ssid[] = WIFI_SSID;  //  your network SSID (name)
 const char pass[] = WIFI_PASS;  // your network password
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // NTP Servers:
 static const char ntpServerName[] = "us.pool.ntp.org";
@@ -35,6 +47,8 @@ time_t getNtpTime();
 void digitalClockDisplay();
 void printDigits(int digits);
 void sendNTPpacket(IPAddress &address);
+
+void checkAlarms();
 
 void setup()
 {
@@ -60,17 +74,33 @@ void setup()
   Serial.println("waiting for sync");
   setSyncProvider(getNtpTime);
   setSyncInterval(300);
+
+  // Set up the dimmer control last!
+  DimmableLight::setSyncPin(syncPin);
+  DimmableLight::begin();
+  Serial.println("Setup is done!");
 }
 
 time_t prevDisplay = 0; // when the digital clock was displayed
+
+byte status = 0; // Status variable {1 = increase light brightness; 0 = keep light off}
 
 void loop()
 {
   if (timeStatus() != timeNotSet) {
     if (now() != prevDisplay) { //update the display only if time has changed
       prevDisplay = now();
-      digitalClockDisplay();
+      //digitalClockDisplay();
+      checkAlarms();
     }
+  }
+}
+
+void checkAlarms()
+{
+  if (hour() == aHour && minute() >= aMin)
+  {
+    status |= 1
   }
 }
 
