@@ -5,7 +5,7 @@
 #include <TimeLib.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
-#include <dimmable_light.h>
+#include <dimmable_light_linearized.h>
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 const int syncPin = 13;
@@ -13,17 +13,27 @@ const int thyristorPin = 14;
 DimmableLightLinearized light(thyristorPin);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
-
 // Set the hour of the day (0-23) you want the LEDs to start getting brighter
-static const uint8_t aHour = 6; 
+static const uint8_t aHour = 20; 
 // Set the minute of the above hour (0-59) you want the LEDs to start getting brighter
-static const uint8_t aMin = 30; 
-///////////////////////////////////////////////////////////////////////////////////////////////////
+static const uint8_t aMin = 5; 
 
+// Set the hour of the day (0-23) you want the LEDs to turn off.
+static const uint8_t oHour = 20; 
+// Set the minute of the above hour (0-59) you want the LEDs to turn off.
+static const uint8_t oMin = 30; 
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+static const int dimmerIncrement = 1;  // Dimmer update increment (rise)
+static const int dimmerPeriod = 1;     // Dimmer update period in seconds (run)
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // You need to make a file called wifi_creds.h that has #define statements for your wifi ssid and password.
 #include "wifi_creds.h"
 const char ssid[] = WIFI_SSID;  //  your network SSID (name)
 const char pass[] = WIFI_PASS;  // your network password
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // NTP Servers:
@@ -83,16 +93,26 @@ void setup()
 }
 
 time_t prevDisplay = 0; // when the digital clock was displayed
-
 byte status = 0; // Status variable {1 = increase light brightness; 0 = keep light off}
+time_t prevUpdate = 0; // when the digital clock was displayed
+int gBrighness = 0;
 
 void loop()
 {
   if (timeStatus() != timeNotSet) {
     if (now() != prevDisplay) { //update the display only if time has changed
       prevDisplay = now();
-      //digitalClockDisplay();
+      digitalClockDisplay();
       checkAlarms();
+      Serial.print("Status: ");
+      Serial.println(status);
+      Serial.print("Brightness: ");
+      Serial.println(light.getBrightness());
+    }
+    // Update the brightness about once every N seconds
+    if ( (now() - prevUpdate) >= dimmerPeriod ) {
+      updateDimmer();
+      prevUpdate = now();
     }
   }
 }
@@ -103,18 +123,42 @@ void checkAlarms()
   {
     status = 1;
   }
+  // Use else instead of else if because the above case will prevent us from turning the light off
+  // if the off time is within the same hour as the start/on time.
+  if (hour() == oHour && minute() >= oMin)
+  {
+    status = 2;
+  }
 }
 
 void updateDimmer()
 {
+  Serial.println("Updating dimmer!");
   if (status & 1) {
-    // We should be the light brighter
-    uint8_t cvalue; 
-    cvalue = light.getBrightness();
-    if(cvalue == 255) {
+    // We should be making the light brighter
+    Serial.println("Start making bright!");
+    if(gBrighness == 255) {
+      Serial.println("Max brightness reached");
       status = 0; // Once the lights are at max brightness we can set the status back to 0.
       return; // If the lights are already at max brightness we need to exit this function early.
     }
+    int nvalue = (gBrighness + dimmerIncrement);
+   // The value can't be over 255 (if the result is over 255 then limit it)
+    nvalue = min(255, nvalue);
+    // The LED lamps I have are dark/off under a value of 24 (when using dimmable_light_linearized.h)
+    nvalue = max(24, nvalue);
+    Serial.print("Old Value: ");
+    Serial.print(gBrighness);
+    Serial.print("\tNew Value: ");
+    Serial.println(nvalue);
+    gBrighness = nvalue;
+    light.setBrightness(gBrighness);
+  }
+  else if (status & 2) {
+    Serial.println("Turn the light off!!!!");
+    gBrighness = 0;
+    light.setBrightness(gBrighness);
+    status = 0;
   }
 }
 
