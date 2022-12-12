@@ -10,7 +10,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 const int syncPin = 13;
 const int thyristorPin = 14;
-DimmableLight light(thyristorPin);
+DimmableLightLinearized light(thyristorPin);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -49,6 +49,7 @@ void printDigits(int digits);
 void sendNTPpacket(IPAddress &address);
 
 void checkAlarms();
+void updateDimmer();
 
 void setup()
 {
@@ -76,8 +77,8 @@ void setup()
   setSyncInterval(300);
 
   // Set up the dimmer control last!
-  DimmableLight::setSyncPin(syncPin);
-  DimmableLight::begin();
+  DimmableLightLinearized::setSyncPin(syncPin);
+  DimmableLightLinearized::begin();
   Serial.println("Setup is done!");
 }
 
@@ -100,7 +101,20 @@ void checkAlarms()
 {
   if (hour() == aHour && minute() >= aMin)
   {
-    status |= 1
+    status = 1;
+  }
+}
+
+void updateDimmer()
+{
+  if (status & 1) {
+    // We should be the light brighter
+    uint8_t cvalue; 
+    cvalue = light.getBrightness();
+    if(cvalue == 255) {
+      status = 0; // Once the lights are at max brightness we can set the status back to 0.
+      return; // If the lights are already at max brightness we need to exit this function early.
+    }
   }
 }
 
